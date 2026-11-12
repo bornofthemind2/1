@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Must be requested from Apple: https://developer.apple.com/carplay/ (Driving Task category, iOS 16+). -->
+    <key>com.apple.developer.carplay-driving-task</key>
+    <true/>
+</dict>
+</plist>

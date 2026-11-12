@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Lets this app see Lyft Driver's package so we can filter by it on Android 11+. -->
+    <queries>
+        <package android:name="com.lyft.android.driver" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="RideBridge"
+        android:theme="@style/Theme.AppCompat.DayNight"
+        android:usesCleartextTraffic="false">
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="5" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Reads ride-request notifications posted by the Lyft Driver app. -->
+        <service
+            android:name=".LyftNotificationListener"
+            android:exported="true"
+            android:label="RideBridge ride reader"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Optional: reads the full ride-request card on screen (more detail than the notification). -->
+        <service
+            android:name=".LyftScreenReaderService"
+            android:exported="true"
+            android:label="RideBridge request card reader"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!-- Android Auto screen. -->
+        <service
+            android:name=".car.RideCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

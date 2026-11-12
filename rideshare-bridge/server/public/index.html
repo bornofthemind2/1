@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RideBridge</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #15191f; --line: #262c35; --text: #f2f4f7; --muted: #8a94a3;
+    --go: #2fbf71; --maybe: #f2b53a; --skip: #e5484d; --accent: #ff00bf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 18px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--skip); margin-right: 8px; vertical-align: middle; }
+  .dot.live { background: var(--go); }
+  main { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; padding: 20px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+  .empty { color: var(--muted); font-size: 22px; text-align: center; padding: 60px 20px; }
+  .verdict { display: inline-block; font-weight: 700; font-size: 20px; padding: 6px 16px;
+    border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; }
+  .verdict.go { background: var(--go); color: #04210f; }
+  .verdict.maybe { background: var(--maybe); color: #2a1d00; }
+  .verdict.skip { background: var(--skip); color: #fff; }
+  .status { color: var(--muted); margin-left: 12px; font-size: 16px; }
+  .fare { font-size: 64px; font-weight: 800; margin: 12px 0 4px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stat { background: #0f1216; border-radius: 12px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 26px; }
+  .stat span { color: var(--muted); font-size: 14px; }
+  .addr { font-size: 22px; margin: 6px 0; }
+  .addr small { display: block; color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
+  .reasons { color: var(--maybe); margin: 8px 0 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+  button, a.btn { flex: 1 1 200px; min-height: 64px; border-radius: 14px; border: 0; font-size: 20px;
+    font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+    justify-content: center; color: var(--text); background: #222833; }
+  button.primary { background: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .toast { margin-top: 12px; min-height: 24px; color: var(--muted); }
+  ul.history { list-style: none; margin: 0; padding: 0; }
+  ul.history li { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  ul.history li span { color: var(--muted); font-size: 15px; }
+  form.key { display: flex; gap: 12px; max-width: 520px; margin: 80px auto; padding: 0 16px; }
+  form.key input { flex: 1; font-size: 20px; padding: 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span id="dot" class="dot"></span>RideBridge</h1>
+  <span id="teslaState" class="status"></span>
+</header>
+<div id="root"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let key = new URLSearchParams(location.search).get('key');
+try { key = key || localStorage.getItem('ridebridge.key'); if (key) localStorage.setItem('ridebridge.key', key); } catch {}
+
+let rides = [];
+let teslaReady = false;
+
+function askKey() {
+  $('#root').innerHTML = `<form class="key"><input name="k" placeholder="Bridge token" autocomplete="off" /><button class="primary">Connect</button></form>`;
+  $('form.key').onsubmit = (e) => {
+    e.preventDefault();
+    key = e.target.k.value.trim();
+    try { localStorage.setItem('ridebridge.key', key); } catch {}
+    start();
+  };
+}
+
+const fmt = (v, pre = '', post = '') => (v == null ? '—' : `${pre}${v}${post}`);
+const mapsLink = (d) => d?.lat != null ? `https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lon}`
+  : d?.address ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.address)}` : null;
+
+function render() {
+  const r = rides[0];
+  const current = !r ? `<div class="card empty">Waiting for a Lyft ride request…</div>` : `
+    <div class="card">
+      <span class="verdict ${esc(r.score?.verdict)}">${esc(r.score?.verdict || 'new')}</span>
+      <span class="status">${esc(r.status)} · ${esc(r.service || 'Lyft')} ${r.riderRating ? '· ★ ' + esc(r.riderRating) : ''}</span>
+      <div class="fare">${fmt(r.fare?.toFixed?.(2), '$')}</div>
+      <div class="stats">
+        <div class="stat"><b>${fmt(r.score?.perMile, '$')}</b><span>per mile</span></div>
+        <div class="stat"><b>${fmt(r.score?.perHour, '$')}</b><span>per hour</span></div>
+        <div class="stat"><b>${fmt(r.pickup?.etaMin, '', ' min')}</b><span>to pickup · ${fmt(r.pickup?.distanceMi, '', ' mi')}</span></div>
+        <div class="stat"><b>${fmt(r.trip?.durationMin, '', ' min')}</b><span>trip · ${fmt(r.trip?.distanceMi, '', ' mi')}</span></div>
+      </div>
+      <div class="addr"><small>Pickup</small>${esc(r.pickup?.address || 'Not shown yet')}</div>
+      <div class="addr"><small>Drop-off</small>${esc(r.dropoff?.address || 'Shown after pickup')}</div>
+      ${r.score?.reasons?.length ? `<p class="reasons">${r.score.reasons.map(esc).join(' · ')}</p>` : ''}
+      <div class="actions">
+        <button class="primary" data-nav="pickup" ${teslaReady && (r.pickup?.address || r.pickup?.lat != null) ? '' : 'disabled'}>Send pickup to car</button>
+        <button data-nav="dropoff" ${teslaReady && (r.dropoff?.address || r.dropoff?.lat != null) ? '' : 'disabled'}>Send drop-off to car</button>
+        ${mapsLink(r.pickup) ? `<a class="btn" target="_blank" rel="noopener" href="${esc(mapsLink(r.pickup))}">Open in Maps</a>` : ''}
+      </div>
+      <div class="toast" id="toast">${r.lastSentToCar ? `Sent ${esc(r.lastSentToCar.target)} to car at ${new Date(r.lastSentToCar.at).toLocaleTimeString()}` : esc(r.lastError || '')}</div>
+    </div>`;
+  const history = rides.slice(1, 12).map((x) => `<li><div>${fmt(x.fare?.toFixed?.(2), '$')} · ${esc(x.pickup?.address || x.service || 'Ride')}</div><span>${esc(x.score?.verdict)} · ${new Date(x.receivedAt).toLocaleTimeString()}</span></li>`).join('');
+  $('#root').innerHTML = `<main><section>${current}</section><aside class="card"><h2 style="margin-top:0;font-size:18px">Recent requests</h2><ul class="history">${history || '<li><span>None yet</span></li>'}</ul></aside></main>`;
+  document.querySelectorAll('[data-nav]').forEach((b) => (b.onclick = () => sendToCar(r.id, b.dataset.nav, b)));
+}
+
+async function sendToCar(id, target, btn) {
+  btn.disabled = true;
+  $('#toast').textContent = 'Sending to car…';
+  try {
+    const res = await fetch(`/api/rides/${id}/navigate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ target }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.status);
+  } catch (e) {
+    $('#toast').textContent = `Could not send: ${e.message}`;
+    btn.disabled = false;
+  }
+}
+
+function upsert(ride) {
+  const i = rides.findIndex((r) => r.id === ride.id);
+  if (i >= 0) rides[i] = ride; else rides.unshift(ride);
+  render();
+}
+
+async function start() {
+  if (!key) return askKey();
+  const res = await fetch('/api/rides', { headers: { Authorization: `Bearer ${key}` } }).catch(() => null);
+  if (!res || res.status === 401) { try { localStorage.removeItem('ridebridge.key'); } catch {} key = null; return askKey(); }
+  rides = (await res.json()).rides;
+  render();
+  const es = new EventSource(`/api/stream?key=${encodeURIComponent(key)}`);
+  es.addEventListener('hello', (e) => {
+    teslaReady = JSON.parse(e.data).tesla;
+    $('#teslaState').textContent = teslaReady ? 'Tesla linked' : 'Tesla not linked';
+    $('#dot').classList.add('live');
+    render();
+  });
+  es.addEventListener('ride', (e) => upsert(JSON.parse(e.data)));
+  es.addEventListener('update', (e) => upsert(JSON.parse(e.data)));
+  es.onerror = () => $('#dot').classList.remove('live');
+}
+start();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "ridebridge-server",
+  "version": "0.1.0",
+  "description": "Receives Lyft ride-request data from the driver's phone and routes it to Tesla navigation, a Tesla-browser dashboard, Android Auto and CarPlay.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "MIT"
+}
