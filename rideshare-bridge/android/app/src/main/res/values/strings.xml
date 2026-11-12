@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_description">Reads the text of Lyft Driver ride-request cards (pickup, fare, trip length) and forwards it to your RideBridge server and car display. It only reads the Lyft Driver app, and it never taps or accepts anything.</string>
+</resources>
